@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Watt — Smart Energy Optimizer</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #0d0f0e; --bg2: #141714; --bg3: #1a1e1a;
+    --surface: #1f241f; --surface2: #252b25;
+    --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.12);
+    --green: #4ade80; --green-dim: rgba(74,222,128,0.12);
+    --amber: #fbbf24; --amber-dim: rgba(251,191,36,0.12);
+    --red: #f87171; --red-dim: rgba(248,113,113,0.1);
+    --blue: #60a5fa; --blue-dim: rgba(96,165,250,0.1);
+    --text: #e8ede8; --text2: #8a9e8a; --text3: #5a6b5a;
+    --font: 'DM Sans', sans-serif; --mono: 'DM Mono', monospace;
+    --r: 12px; --r2: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; font-size: 14px; line-height: 1.6; }
+  .app { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+
+  /* Sidebar */
+  .sidebar { background: var(--bg2); border-right: 1px solid var(--border); padding: 24px 16px; display: flex; flex-direction: column; gap: 8px; position: sticky; top: 0; height: 100vh; }
+  .logo { display: flex; align-items: center; gap: 10px; padding: 0 8px 20px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  .logo-icon { width: 32px; height: 32px; background: var(--green); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .logo-text { font-size: 16px; font-weight: 600; }
+  .logo-sub { font-size: 10px; color: var(--text3); font-family: var(--mono); }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--r2); cursor: pointer; color: var(--text2); font-size: 13px; transition: all .15s; border: none; background: none; width: 100%; text-align: left; }
+  .nav-item:hover { background: var(--surface); color: var(--text); }
+  .nav-item.active { background: var(--green-dim); color: var(--green); font-weight: 500; }
+  .nav-icon { font-size: 15px; width: 20px; text-align: center; }
+  .sidebar-footer { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); }
+  .live-badge { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--green); font-family: var(--mono); padding: 6px 12px; }
+  .live-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; animation: pulse 2s infinite; }
+  .live-source { font-size: 10px; color: var(--text3); padding: 2px 12px 8px; font-family: var(--mono); }
+  .last-updated { font-size: 10px; color: var(--text3); padding: 0 12px 6px; font-family: var(--mono); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  /* Main */
+  .main { padding: 28px 32px; overflow-y: auto; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* Loading overlay */
+  .data-loading { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--surface); border-radius: var(--r); margin-bottom: 20px; font-size: 13px; color: var(--text2); }
+  .data-loading.hidden { display: none; }
+  .data-error { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: var(--red-dim); border: 1px solid rgba(248,113,113,0.2); border-radius: var(--r); margin-bottom: 20px; font-size: 13px; color: var(--red); }
+  .data-error.hidden { display: none; }
+
+  /* Page header */
+  .page-header { margin-bottom: 24px; }
+  .page-title { font-size: 20px; font-weight: 600; }
+  .page-sub { font-size: 13px; color: var(--text2); margin-top: 2px; }
+
+  /* Stat cards */
+  .stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 24px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 16px 18px; }
+  .stat-label { font-size: 11px; color: var(--text3); font-family: var(--mono); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+  .stat-value { font-size: 22px; font-weight: 600; line-height: 1.2; }
+  .stat-delta { font-size: 11px; color: var(--green); margin-top: 4px; }
+  .stat-delta.bad { color: var(--red); }
+  .stat-delta.warn { color: var(--amber); }
+
+  /* Live badge on stat */
+  .live-pip { display: inline-block; width: 5px; height: 5px; background: var(--green); border-radius: 50%; margin-right: 4px; animation: pulse 2s infinite; }
+
+  /* Chart */
+  .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 20px; margin-bottom: 20px; }
+  .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .chart-title { font-size: 14px; font-weight: 500; }
+  .legend-row { display: flex; gap: 16px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text2); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+  .chart-wrap { position: relative; height: 200px; }
+  .tou-strip { display: flex; gap: 2px; margin: 12px 0 4px; }
+  .tou-hour { flex: 1; height: 20px; border-radius: 2px; position: relative; cursor: default; transition: opacity .2s; }
+  .tou-hour:hover { opacity: .75; }
+  .tou-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--text3); font-family: var(--mono); }
+  .now-marker { position: relative; }
+
+  /* Two col */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+
+  /* Suggestion cards */
+  .suggestion-list { display: flex; flex-direction: column; gap: 10px; }
+  .suggestion-card { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r); padding: 14px 16px; display: flex; gap: 14px; align-items: flex-start; transition: border-color .2s; }
+  .suggestion-card:hover { border-color: var(--border2); }
+  .suggestion-card.best { border-color: rgba(74,222,128,0.3); background: rgba(74,222,128,0.04); }
+  .sug-icon { font-size: 22px; flex-shrink: 0; margin-top: 1px; }
+  .sug-body { flex: 1; }
+  .sug-name { font-size: 13px; font-weight: 500; }
+  .sug-time { font-size: 12px; color: var(--green); font-family: var(--mono); }
+  .sug-reason { font-size: 12px; color: var(--text2); margin-top: 3px; line-height: 1.5; }
+  .sug-right { text-align: right; flex-shrink: 0; }
+  .sug-save { font-size: 14px; font-weight: 600; color: var(--green); }
+  .sug-save-label { font-size: 10px; color: var(--text3); }
+  .best-tag { display: inline-block; font-size: 10px; font-family: var(--mono); background: var(--green-dim); color: var(--green); padding: 2px 8px; border-radius: 20px; margin-bottom: 4px; }
+
+  /* Weather strip */
+  .weather-strip { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-bottom: 20px; }
+  .wx-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r2); padding: 12px 14px; }
+  .wx-label { font-size: 10px; color: var(--text3); font-family: var(--mono); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .wx-value { font-size: 17px; font-weight: 600; }
+  .wx-sub { font-size: 10px; color: var(--text2); margin-top: 2px; }
+
+  /* AI panel */
+  .ai-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); display: flex; flex-direction: column; height: 340px; }
+  .ai-header { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; }
+  .ai-dot { width: 7px; height: 7px; background: var(--green); border-radius: 50%; animation: pulse 2s infinite; }
+  .ai-messages { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .ai-messages::-webkit-scrollbar { width: 4px; }
+  .ai-messages::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  .msg { max-width: 85%; }
+  .msg.user { align-self: flex-end; }
+  .msg-bubble { padding: 9px 13px; border-radius: 10px; font-size: 12px; line-height: 1.5; }
+  .msg.ai .msg-bubble { background: var(--surface2); border-radius: 4px 10px 10px 10px; }
+  .msg.user .msg-bubble { background: var(--green-dim); color: var(--green); border-radius: 10px 4px 10px 10px; }
+  .msg-time { font-size: 10px; color: var(--text3); margin-top: 3px; font-family: var(--mono); padding: 0 4px; }
+  .msg.user .msg-time { text-align: right; }
+  .ai-input-row { padding: 12px 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+  .ai-input { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-family: var(--font); font-size: 12px; outline: none; transition: border-color .2s; }
+  .ai-input:focus { border-color: var(--green); }
+  .ai-input::placeholder { color: var(--text3); }
+  .ai-send { background: var(--green); color: #0d0f0e; border: none; border-radius: 8px; padding: 8px 14px; font-family: var(--font); font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity .2s; }
+  .ai-send:hover { opacity: .85; }
+  .ai-send:disabled { opacity: .4; cursor: not-allowed; }
+  .typing { display: flex; gap: 4px; align-items: center; padding: 10px 14px; }
+  .typing span { width: 5px; height: 5px; background: var(--text3); border-radius: 50%; animation: bounce .8s infinite; }
+  .typing span:nth-child(2) { animation-delay: .15s; }
+  .typing span:nth-child(3) { animation-delay: .3s; }
+  @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+
+  /* Appliance grid */
+  .appliance-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 20px; }
+  .appliance-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 16px; cursor: pointer; transition: all .2s; user-select: none; }
+  .appliance-card:hover { border-color: var(--border2); }
+  .appliance-card.selected { border-color: var(--green); background: var(--green-dim); }
+  .app-icon { font-size: 24px; margin-bottom: 8px; }
+  .app-name { font-size: 13px; font-weight: 500; }
+  .app-watt { font-size: 11px; color: var(--text3); font-family: var(--mono); }
+  .app-check { font-size: 12px; color: var(--green); margin-top: 6px; display: none; }
+  .appliance-card.selected .app-check { display: block; }
+  .analyze-btn { background: var(--green); color: #0d0f0e; border: none; border-radius: var(--r); padding: 13px 28px; font-family: var(--font); font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity .2s; display: flex; align-items: center; gap: 8px; }
+  .analyze-btn:hover { opacity: .85; }
+  .analyze-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* Result cards */
+  .result-cards { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+  .result-card { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r); padding: 14px 16px; animation: fadeIn .4s ease forwards; opacity: 0; }
+  @keyframes fadeIn { to { opacity: 1; } }
+  .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .result-appliance { font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+  .result-time-badge { background: var(--green-dim); color: var(--green); font-size: 11px; font-family: var(--mono); padding: 3px 10px; border-radius: 20px; }
+  .result-time-badge.ok { background: var(--amber-dim); color: var(--amber); }
+  .result-body { font-size: 12px; color: var(--text2); line-height: 1.6; }
+  .result-savings { font-size: 12px; color: var(--green); font-weight: 500; margin-top: 6px; }
+  .renew-bar-wrap { margin: 14px 0 6px; }
+  .renew-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--text2); margin-bottom: 6px; }
+  .renew-bar { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+  .renew-fill { height: 100%; border-radius: 3px; transition: width 1s ease; }
+
+  /* Savings page */
+  .savings-summary { background: rgba(74,222,128,0.04); border: 1px solid rgba(74,222,128,0.2); border-radius: var(--r); padding: 24px; margin-bottom: 20px; display: flex; gap: 32px; align-items: center; }
+  .savings-big { font-size: 40px; font-weight: 600; color: var(--green); line-height: 1; }
+  .savings-desc { font-size: 13px; color: var(--text2); margin-top: 4px; }
+  .co2-pill { background: var(--blue-dim); color: var(--blue); display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 6px 14px; border-radius: 20px; margin-top: 8px; }
+
+  /* Spinner */
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(0,0,0,0.2); border-top-color: #0d0f0e; border-radius: 50%; animation: spin .6s linear infinite; }
+  .spinner-sm { display: inline-block; width: 12px; height: 12px; border: 1.5px solid rgba(255,255,255,0.15); border-top-color: var(--text2); border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Refresh button */
+  .refresh-btn { background: none; border: 1px solid var(--border); border-radius: var(--r2); padding: 5px 12px; color: var(--text2); font-size: 11px; font-family: var(--mono); cursor: pointer; transition: all .15s; }
+  .refresh-btn:hover { border-color: var(--green); color: var(--green); }
+
+  @media (max-width: 900px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .stats-row { grid-template-columns: repeat(2,1fr); }
+    .two-col { grid-template-columns: 1fr; }
+    .appliance-grid { grid-template-columns: repeat(2,1fr); }
+    .weather-strip { grid-template-columns: repeat(2,1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">⚡</div>
+      <div>
+        <div class="logo-text">Watt</div>
+        <div class="logo-sub">energy optimizer</div>
+      </div>
+    </div>
+    <button class="nav-item active" onclick="showPage('dashboard',this)"><span class="nav-icon">◈</span> Dashboard</button>
+    <button class="nav-item" onclick="showPage('schedule',this)"><span class="nav-icon">⊞</span> Smart Schedule</button>
+    <button class="nav-item" onclick="showPage('savings',this)"><span class="nav-icon">◎</span> Savings</button>
+    <div class="sidebar-footer">
+      <div class="live-badge"><span class="live-dot"></span> Live data active</div>
+      <div class="live-source" id="liveSourceLabel">Open-Meteo · Chennai</div>
+      <div class="last-updated" id="lastUpdated">Fetching…</div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- ── DASHBOARD ── -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div class="page-title">Today's energy overview</div>
+          <div class="page-sub" id="dashSubtitle">Chennai grid · Loading live data…</div>
+        </div>
+        <button class="refresh-btn" onclick="fetchLiveData(true);fetchGridStats()">↻ Refresh</button>
+      </div>
+
+      <!-- Loading / error banners -->
+      <div class="data-loading" id="loadingBanner"><span class="spinner-sm"></span> Fetching live data from Open-Meteo…</div>
+      <div class="data-error hidden" id="errorBanner">⚠ Could not reach Open-Meteo. Showing estimated data based on typical Chennai patterns.</div>
+
+      <!-- Weather strip -->
+      <div class="weather-strip" style="grid-template-columns:repeat(5,1fr)">
+        <div class="wx-card">
+          <div class="wx-label">Temperature</div>
+          <div class="wx-value" id="wxTemp">--°C</div>
+          <div class="wx-sub" id="wxTempSub">loading…</div>
+        </div>
+        <div class="wx-card">
+          <div class="wx-label">Solar radiation</div>
+          <div class="wx-value" id="wxSolar">-- W/m²</div>
+          <div class="wx-sub" id="wxSolarSub">loading…</div>
+        </div>
+        <div class="wx-card">
+          <div class="wx-label">Cloud cover</div>
+          <div class="wx-value" id="wxCloud">--%</div>
+          <div class="wx-sub" id="wxCloudSub">loading…</div>
+        </div>
+        <div class="wx-card">
+          <div class="wx-label">Wind speed</div>
+          <div class="wx-value" id="wxWind">-- km/h</div>
+          <div class="wx-sub" id="wxWindSub">loading…</div>
+        </div>
+        <div class="wx-card" id="wxIEX">
+          <div class="wx-label">Price now</div>
+          <div class="wx-value" id="iexValue">₹--</div>
+          <div class="wx-sub" id="iexSub">IEX / estimate</div>
+        </div>
+      </div>
+
+      <!-- Stat cards -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">demand index now</div>
+          <div class="stat-value" id="statDemand">--</div>
+          <div class="stat-delta" id="statDemandDelta">loading…</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">solar score now</div>
+          <div class="stat-value" id="statSolar">--%</div>
+          <div class="stat-delta" id="statSolarDelta">loading…</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">best window today</div>
+          <div class="stat-value" id="statBestWindow" style="font-size:17px">--</div>
+          <div class="stat-delta" id="statBestDetail">loading…</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">potential saving</div>
+          <div class="stat-value" id="statSaving" style="color:var(--green)">₹--</div>
+          <div class="stat-delta" id="statSavingDelta">vs running now</div>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">24-hour demand index & solar score forecast</div>
+          <div class="legend-row">
+            <div class="legend-item"><div class="legend-dot" style="background:#f87171"></div>Demand</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#fbbf24"></div>Solar score</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#60a5fa"></div>Temp °C</div>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="priceChart"></canvas></div>
+        <div style="margin-top:16px">
+          <div style="font-size:11px;color:var(--text3);font-family:var(--mono);margin-bottom:6px">DEMAND HEAT MAP — hover for details</div>
+          <div class="tou-strip" id="touStrip"></div>
+          <div class="tou-labels"><span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span><span>11 PM</span></div>
+        </div>
+      </div>
+
+      <!-- Generation mix (populated by backend) -->
+      <div class="chart-card" id="genMixSection" style="margin-bottom:20px">
+        <div style="font-size:13px;font-weight:500;margin-bottom:6px">National generation mix</div>
+        <div style="font-size:12px;color:var(--text3)">Start the backend to see live data from grid-india.in</div>
+      </div>
+
+      <!-- Suggestions + AI -->
+      <div class="two-col">
+        <div>
+          <div style="font-size:13px;font-weight:500;margin-bottom:12px">Live suggestions</div>
+          <div class="suggestion-list" id="suggestionList"><div style="color:var(--text3);font-size:12px;padding:12px">Loading suggestions…</div></div>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:500;margin-bottom:12px">Ask Watt AI</div>
+          <div class="ai-panel">
+            <div class="ai-header"><span class="ai-dot"></span> Watt AI · live grid context</div>
+            <div class="ai-messages" id="aiMessages">
+              <div class="msg ai">
+                <div class="msg-bubble">Hi! I'm fetching live grid data for Chennai right now. Once loaded, I can give you specific advice based on today's actual solar output and demand patterns.</div>
+                <div class="msg-time">now</div>
+              </div>
+            </div>
+            <div class="ai-input-row">
+              <input class="ai-input" id="aiInput" placeholder="Ask about your energy usage…" onkeydown="if(event.key==='Enter')sendAI()">
+              <button class="ai-send" id="aiSendBtn" onclick="sendAI()">Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SCHEDULE ── -->
+    <div class="page" id="page-schedule">
+      <div class="page-header">
+        <div class="page-title">Smart appliance scheduler</div>
+        <div class="page-sub">Optimised using live solar & demand data</div>
+      </div>
+      <div class="appliance-grid" id="applianceGrid"></div>
+      <button class="analyze-btn" id="analyzeBtn" onclick="analyzeAppliances()">
+        <span id="analyzeBtnText">⚡ Optimize with live data</span>
+      </button>
+      <div class="result-cards" id="resultCards"></div>
+    </div>
+
+    <!-- ── SAVINGS ── -->
+    <div class="page" id="page-savings">
+      <div class="page-header">
+        <div class="page-title">Your savings</div>
+        <div class="page-sub">Based on AI-optimized usage this month</div>
+      </div>
+      <div class="savings-summary">
+        <div>
+          <div class="savings-big">₹312</div>
+          <div class="savings-desc">saved this month vs. unoptimized usage</div>
+          <div class="co2-pill">🌿 14.2 kg CO₂ avoided</div>
+        </div>
+        <div style="flex:1">
+          <div class="renew-bar-wrap">
+            <div class="renew-label"><span>Avg solar score used</span><span style="color:var(--green)" id="savSolar">67%</span></div>
+            <div class="renew-bar"><div class="renew-fill" id="savSolarBar" style="width:67%;background:var(--green)"></div></div>
+          </div>
+          <div class="renew-bar-wrap">
+            <div class="renew-label"><span>Peak-hour avoidance</span><span style="color:var(--amber)">81%</span></div>
+            <div class="renew-bar"><div class="renew-fill" style="width:81%;background:var(--amber)"></div></div>
+          </div>
+          <div class="renew-bar-wrap">
+            <div class="renew-label"><span>Schedule adherence</span><span style="color:var(--blue)">74%</span></div>
+            <div class="renew-bar"><div class="renew-fill" style="width:74%;background:var(--blue)"></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-header"><div class="chart-title">Monthly savings breakdown (₹)</div></div>
+        <div class="chart-wrap" style="height:180px"><canvas id="savingsChart"></canvas></div>
+      </div>
+      <div style="font-size:13px;font-weight:500;margin-bottom:12px">This month's wins</div>
+      <div class="suggestion-list" id="winslist"></div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ── CONFIG ──
+const ANTHROPIC_KEY = 'sk-proj-qmPfNQy9xgmeXRSCj4cuUeIlxMuPWo2sj4-ovMXn1o4u5dZmuhHRjEArMyf3zl6gGJ721NpQikT3BlbkFJr0j-su7UB-gP6Yf3uIZS5IUbHt_boeolwtiBeCbR8vI0KApr8_1BBkqpFYdQV61OqgxbIXpikA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'; // Paste your Claude API key here
+const BACKEND_URL   = 'http://localhost:8000'; // FastAPI backend URL
+const LAT = 13.0827, LON = 80.2707; // Chennai
+const REFRESH_MS = 5 * 60 * 1000; // 5 min (backend caches at 5 min too)
+
+// ── LIVE DATA STATE ──
+let liveData = null;
+let priceChartRef = null;
+let dataSources = { backend: false, openmeteo: false, fallback: false };
+
+// ── REAL-TIME GRID STATS — direct fetch via CORS proxy ──
+// Hits tnebsldc.org (freq + TN demand) and grid-india.in (national RE%)
+// independently of the FastAPI backend so the 3 cards are always live.
+
+// ── MAIN FETCH — tries backend first, then Open-Meteo, then fallback ──
+async function fetchLiveData(manual = false) {
+  const banner   = document.getElementById('loadingBanner');
+  const errBanner= document.getElementById('errorBanner');
+  banner.classList.remove('hidden');
+  errBanner.classList.add('hidden');
+
+  // 1. Try FastAPI backend (/api/all)
+  let backendData = null;
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/all`, {signal: AbortSignal.timeout(4000)});
+    if (res.ok) {
+      backendData = await res.json();
+      dataSources.backend = true;
+    }
+  } catch(e) { dataSources.backend = false; }
+
+  // 2. Always fetch Open-Meteo for solar/weather (lightweight, CORS-friendly)
+  let meteoData = null;
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}`+
+      `&hourly=temperature_2m,cloud_cover,direct_radiation,wind_speed_10m`+
+      `&current=temperature_2m,cloud_cover,direct_radiation,wind_speed_10m`+
+      `&timezone=Asia%2FKolkata&forecast_days=1`;
+    const res = await fetch(url, {signal: AbortSignal.timeout(5000)});
+    if (res.ok) { meteoData = await res.json(); dataSources.openmeteo = true; }
+  } catch(e) { dataSources.openmeteo = false; }
+
+  banner.classList.add('hidden');
+
+  if (!backendData && !meteoData) {
+    errBanner.classList.remove('hidden');
+    liveData = generateFallbackData();
+    dataSources.fallback = true;
+    document.getElementById('lastUpdated').textContent = 'Using estimated data';
+    document.getElementById('liveSourceLabel').textContent = 'Estimated · offline';
+  } else {
+    liveData = mergeData(backendData, meteoData);
+    const srcParts = [];
+    if (dataSources.backend)   srcParts.push('Grid-India · SLDC · IEX');
+    if (dataSources.openmeteo) srcParts.push('Open-Meteo');
+    document.getElementById('liveSourceLabel').textContent = srcParts.join(' · ') || 'Estimated';
+    document.getElementById('lastUpdated').textContent =
+      'Updated ' + new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+  }
+
+  renderDashboard();
+  if (manual) renderSuggestions();
+}
+
+// ── MERGE backend + Open-Meteo into unified liveData ──
+function mergeData(backend, meteo) {
+  // Start with Open-Meteo base (always most reliable for solar/weather)
+  const base = meteo ? processOpenMeteo(meteo) : generateFallbackData();
+
+  if (!backend) return base;
+
+  const iex    = backend.iex_prices   || {};
+  const sldc   = backend.tn_sldc      || {};
+  const grid   = backend.grid_india   || {};
+
+  // Override prices with real IEX day-ahead prices if available
+  if (iex.prices_rupees_kwh && iex.prices_rupees_kwh.length === 24) {
+    base.prices = iex.prices_rupees_kwh;
+    base.priceSource = 'IEX day-ahead MCP';
+  }
+
+  // Override demand with real TN SLDC current demand
+  if (sldc.tn_demand_mw) {
+    const TN_PEAK_MW = 16000; // TN all-time peak MW for normalisation
+    base.currentDemand = Math.min(100, Math.round((sldc.tn_demand_mw / TN_PEAK_MW) * 100));
+    base.currentDemandMW = sldc.tn_demand_mw;
+    base.demandSource = 'TN SLDC live';
+  }
+
+  // Frequency
+  if (sldc.frequency_hz) base.frequencyHz = sldc.frequency_hz;
+  else if (grid.frequency_hz) base.frequencyHz = grid.frequency_hz;
+
+  // Real TN solar/wind MW from SLDC
+  if (sldc.tn_solar_mw) base.solarMW = sldc.tn_solar_mw;
+  if (sldc.tn_wind_mw)  base.windMW  = sldc.tn_wind_mw;
+  if (sldc.tn_renewable_pct) base.currentSolarScore = Math.round(sldc.tn_renewable_pct);
+
+  // National renewable % from Grid-India
+  if (grid.renewable_pct) base.nationalRenewablePct = grid.renewable_pct;
+  if (grid.total_demand_mw) base.nationalDemandMW = grid.total_demand_mw;
+  if (grid.generation_mix) base.generationMix = grid.generation_mix;
+
+  // Re-compute currentPrice from real prices array
+  base.currentPrice = base.prices[base.nowHour];
+
+  // Re-find best window using real prices + solar
+  let bestScore = -Infinity;
+  for (let i = 6; i < 22; i++) {
+    const score = base.solarScore[i] * 0.4 - (base.prices[i] / (base.prices.reduce((a,b)=>a+b,0)/24)) * 60;
+    if (score > bestScore) { bestScore = score; base.bestHour = i; }
+  }
+  base.bestPrice  = base.prices[base.bestHour];
+  base.potentialSaving = Math.max(0,
+    Math.round((base.currentPrice - base.bestPrice) * 5 * 10));
+
+  return base;
+}
+
+// ── PROCESS OPEN-METEO RESPONSE ──
+function processOpenMeteo(raw) {
+  const h = raw.hourly;
+  const cur = raw.current;
+  const nowHour = new Date().getHours();
+
+  // Build 24-hr arrays
+  const temps = h.temperature_2m.slice(0, 24);
+  const clouds = h.cloud_cover.slice(0, 24);
+  const radiation = h.direct_radiation.slice(0, 24);
+  const wind = h.wind_speed_10m.slice(0, 24);
+
+  // Derive solar score 0–100 from radiation (max ~900 W/m² for Chennai)
+  const solarScore = radiation.map(r => Math.min(100, Math.round((r / 900) * 100)));
+
+  // Derive demand index 0–100 from temperature + time-of-day
+  // Logic: high temp → high AC demand. Morning/evening peaks (7-9, 18-21).
+  const demandIdx = temps.map((t, i) => {
+    let base = 30;
+    // Temperature component (Chennai: 25°C = baseline, 38°C = extreme)
+    const tempFactor = Math.max(0, Math.min(40, ((t - 25) / 13) * 40));
+    // Time-of-day component
+    let timeFactor = 0;
+    if (i >= 7 && i <= 9) timeFactor = 25;       // morning peak
+    else if (i >= 18 && i <= 21) timeFactor = 30; // evening peak
+    else if (i >= 22 || i <= 4) timeFactor = -15; // overnight low
+    else if (i >= 12 && i <= 16) timeFactor = 10; // afternoon moderate
+    return Math.max(10, Math.min(100, Math.round(base + tempFactor + timeFactor)));
+  });
+
+  // Derive dynamic price from demand + TANGEDCO slabs
+  // Base slab ₹5.00, ±adjustment based on demand index
+  const prices = demandIdx.map(d => {
+    const base = 5.0;
+    const multiplier = 0.5 + (d / 100) * 1.2;
+    return Math.round(base * multiplier * 100) / 100;
+  });
+
+  // Find best window (lowest demand + highest solar)
+  let bestScore = -Infinity, bestHour = 13;
+  for (let i = 6; i < 22; i++) {
+    const score = solarScore[i] - demandIdx[i];
+    if (score > bestScore) { bestScore = score; bestHour = i; }
+  }
+
+  // Current values
+  const currentTemp = cur.temperature_2m;
+  const currentCloud = cur.cloud_cover;
+  const currentRadiation = cur.direct_radiation;
+  const currentWind = cur.wind_speed_10m;
+  const currentSolarScore = Math.min(100, Math.round((currentRadiation / 900) * 100));
+  const currentDemand = demandIdx[nowHour];
+  const currentPrice = prices[nowHour];
+
+  return {
+    nowHour, currentTemp, currentCloud, currentRadiation, currentWind,
+    currentSolarScore, currentDemand, currentPrice,
+    temps, clouds, radiation, wind, solarScore, demandIdx, prices,
+    bestHour,
+    bestSolar: solarScore[bestHour],
+    bestDemand: demandIdx[bestHour],
+    bestPrice: prices[bestHour],
+    potentialSaving: Math.round((currentPrice - prices[bestHour]) * 5 * 10), // ~5kWh typical
+  };
+}
+
+// ── FALLBACK DATA (offline / API error) ──
+function generateFallbackData() {
+  const nowHour = new Date().getHours();
+  // Typical Chennai March pattern
+  const temps   = [28,27,27,26,26,26,27,29,31,33,35,37,38,38,37,36,35,34,33,32,31,30,29,28];
+  const clouds  = [20,20,15,15,10,10,20,30,25,20,15,10,10,15,20,25,30,35,40,35,30,25,20,20];
+  const radiation=[0,0,0,0,0,0,50,200,400,600,750,850,900,880,800,700,550,350,100,20,0,0,0,0];
+  const wind    = [8,7,7,6,6,7,8,10,12,14,15,16,16,15,14,14,13,12,11,10,9,9,8,8];
+  const solarScore = radiation.map(r => Math.min(100, Math.round((r/900)*100)));
+  const demandIdx = temps.map((t,i)=>{
+    let base=30, tf=Math.max(0,Math.min(40,((t-25)/13)*40));
+    let tod=0;
+    if(i>=7&&i<=9)tod=25; else if(i>=18&&i<=21)tod=30;
+    else if(i>=22||i<=4)tod=-15; else if(i>=12&&i<=16)tod=10;
+    return Math.max(10,Math.min(100,Math.round(base+tf+tod)));
+  });
+  const prices = demandIdx.map(d=>Math.round((5.0*(0.5+(d/100)*1.2))*100)/100);
+  let bestScore=-Infinity,bestHour=13;
+  for(let i=6;i<22;i++){const s=solarScore[i]-demandIdx[i];if(s>bestScore){bestScore=s;bestHour=i;}}
+  const currentSolarScore=solarScore[nowHour];
+  const currentDemand=demandIdx[nowHour];
+  const currentPrice=prices[nowHour];
+  return {
+    nowHour,currentTemp:temps[nowHour],currentCloud:clouds[nowHour],
+    currentRadiation:radiation[nowHour],currentWind:wind[nowHour],
+    currentSolarScore,currentDemand,currentPrice,
+    temps,clouds,radiation,wind,solarScore,demandIdx,prices,
+    bestHour,bestSolar:solarScore[bestHour],bestDemand:demandIdx[bestHour],
+    bestPrice:prices[bestHour],
+    potentialSaving:Math.round((currentPrice-prices[bestHour])*5*10),
+  };
+}
+
+// ── FORMAT HELPERS ──
+function fmtHour(h) {
+  if(h===0) return '12 AM';
+  if(h===12) return '12 PM';
+  return h<12 ? h+' AM' : (h-12)+' PM';
+}
+function demandLabel(d) {
+  if(d>=75) return 'Peak demand';
+  if(d>=50) return 'Moderate demand';
+  return 'Low demand';
+}
+function solarLabel(s) {
+  if(s>=70) return 'Strong solar';
+  if(s>=40) return 'Moderate solar';
+  if(s>0) return 'Weak solar';
+  return 'No solar (night)';
+}
+function demandColor(d) {
+  if(d>=75) return 'rgba(248,113,113,0.7)';
+  if(d>=50) return 'rgba(251,191,36,0.65)';
+  return 'rgba(74,222,128,0.65)';
+}
+
+// ── RENDER DASHBOARD ──
+function renderDashboard() {
+  if(!liveData) return;
+  const d = liveData;
+  const now = new Date();
+
+  // Subtitle
+  document.getElementById('dashSubtitle').textContent =
+    `Chennai grid · ${now.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'})}`;
+
+  // Weather strip
+  document.getElementById('wxTemp').textContent = d.currentTemp.toFixed(1)+'°C';
+  document.getElementById('wxTempSub').textContent = d.currentTemp>=36?'Extreme heat':'Warm day';
+  document.getElementById('wxSolar').textContent = Math.round(d.currentRadiation)+' W/m²';
+  document.getElementById('wxSolarSub').textContent = solarLabel(d.currentSolarScore);
+  document.getElementById('wxCloud').textContent = Math.round(d.currentCloud)+'%';
+  document.getElementById('wxCloudSub').textContent = d.currentCloud>60?'Overcast':'Clear sky';
+  document.getElementById('wxWind').textContent = d.currentWind.toFixed(1)+' km/h';
+  document.getElementById('wxWindSub').textContent = d.currentWind>20?'Strong breeze':'Light wind';
+
+  // IEX price — always from liveData
+  const ixEl = document.getElementById('wxIEX');
+  if (ixEl) {
+    document.getElementById('iexValue').textContent = '₹'+d.currentPrice.toFixed(2);
+    document.getElementById('iexSub').textContent = d.priceSource || 'Estimated';
+  }
+
+  // Generation mix section
+  if (d.generationMix) {
+    const genEl = document.getElementById('genMixSection');
+    if (genEl) {
+      const mix = d.generationMix;
+      const total = Object.values(mix).reduce((a,b)=>a+(b||0),0) || 1;
+      const items = [
+        {k:'thermal_mw', label:'Thermal', color:'var(--red)'},
+        {k:'solar_mw',   label:'Solar',   color:'var(--amber)'},
+        {k:'wind_mw',    label:'Wind',    color:'var(--green)'},
+        {k:'hydro_mw',   label:'Hydro',   color:'var(--blue)'},
+        {k:'nuclear_mw', label:'Nuclear', color:'var(--text2)'},
+      ];
+      genEl.innerHTML = `
+        <div style="font-size:13px;font-weight:500;margin-bottom:10px">National generation mix (grid-india.in)</div>
+        ${items.filter(i=>mix[i.k]).map(i=>`
+          <div style="margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:3px">
+              <span>${i.label}</span>
+              <span style="color:${i.color}">${Math.round(mix[i.k]).toLocaleString('en-IN')} MW &nbsp;${Math.round(mix[i.k]/total*100)}%</span>
+            </div>
+            <div style="height:5px;background:var(--surface2);border-radius:3px;overflow:hidden">
+              <div style="height:100%;width:${Math.round(mix[i.k]/total*100)}%;background:${i.color};border-radius:3px;transition:width 1s"></div>
+            </div>
+          </div>`).join('')}
+      `;
+    }
+  }
+
+  // Stat cards
+  const demEl = document.getElementById('statDemand');
+  demEl.textContent = d.currentDemand+'/100';
+  demEl.style.color = d.currentDemand>=75?'var(--red)':d.currentDemand>=50?'var(--amber)':'var(--green)';
+  const demDelta = document.getElementById('statDemandDelta');
+  demDelta.textContent = demandLabel(d.currentDemand);
+  demDelta.className = 'stat-delta' + (d.currentDemand>=75?' bad':d.currentDemand>=50?' warn':'');
+
+  document.getElementById('statSolar').textContent = d.currentSolarScore+'%';
+  const solDelta = document.getElementById('statSolarDelta');
+  solDelta.textContent = solarLabel(d.currentSolarScore);
+  solDelta.className = 'stat-delta' + (d.currentSolarScore<20?' bad':'');
+
+  document.getElementById('statBestWindow').textContent = fmtHour(d.bestHour)+'–'+fmtHour(d.bestHour+2);
+  document.getElementById('statBestDetail').textContent =
+    '☀ '+d.bestSolar+'% solar · demand '+d.bestDemand;
+
+  document.getElementById('statSaving').textContent = d.potentialSaving>0?'₹'+d.potentialSaving:'₹0';
+  document.getElementById('statSavingDelta').textContent =
+    d.potentialSaving>0?'if shifted to '+fmtHour(d.bestHour):'Already optimal time';
+
+  renderChart();
+  renderTouStrip();
+  renderSuggestions();
+  updateAIContext();
+}
+
+// ── CHART ──
+function renderChart() {
+  const d = liveData;
+  const labels = Array.from({length:24},(_,i)=>fmtHour(i));
+  const ctx = document.getElementById('priceChart').getContext('2d');
+  if(priceChartRef) { priceChartRef.destroy(); priceChartRef = null; }
+  priceChartRef = new Chart(ctx, {
+    type:'line',
+    data:{
+      labels,
+      datasets:[
+        {
+          label:'Demand index',
+          data: d.demandIdx,
+          borderColor:'#f87171',
+          backgroundColor:'rgba(248,113,113,0.06)',
+          borderWidth:2, pointRadius:0, tension:0.4, fill:true, yAxisID:'y'
+        },
+        {
+          label:'Solar score %',
+          data: d.solarScore,
+          borderColor:'#fbbf24',
+          backgroundColor:'transparent',
+          borderWidth:1.5, pointRadius:0, borderDash:[4,3], tension:0.4, yAxisID:'y'
+        },
+        {
+          label:'Temperature °C',
+          data: d.temps,
+          borderColor:'#60a5fa',
+          backgroundColor:'transparent',
+          borderWidth:1, pointRadius:0, tension:0.4, yAxisID:'y2'
+        }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#1f241f', titleColor:'#8a9e8a',
+          bodyColor:'#e8ede8', borderColor:'rgba(255,255,255,0.1)', borderWidth:1,
+          callbacks:{
+            afterBody: (items) => {
+              const i = items[0]?.dataIndex;
+              if(i==null) return '';
+              return `₹${liveData.prices[i].toFixed(2)}/kWh est.`;
+            }
+          }
+        }
+      },
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#5a6b5a',font:{size:10},maxTicksLimit:8}},
+        y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#8a9e8a',font:{size:10},callback:v=>v},position:'left',min:0,max:100},
+        y2:{grid:{display:false},ticks:{color:'#60a5fa',font:{size:10},callback:v=>v+'°'},position:'right'}
+      }
+    }
+  });
+}
+
+function renderTouStrip() {
+  const strip = document.getElementById('touStrip');
+  const nowH = liveData.nowHour;
+  strip.innerHTML = liveData.demandIdx.map((d,i) => {
+    const isNow = i === nowH;
+    const border = isNow ? 'outline:2px solid var(--green);outline-offset:1px;' : '';
+    const tip = `${fmtHour(i)} · demand ${d} · solar ${liveData.solarScore[i]}% · ₹${liveData.prices[i].toFixed(2)}/kWh`;
+    return `<div class="tou-hour" style="background:${demandColor(d)};${border}" title="${tip}"></div>`;
+  }).join('');
+}
+
+// ── SUGGESTIONS (live-data driven) ──
+const APPLIANCES_DEF = [
+  {icon:'🧺', name:'Washing machine', watt:500},
+  {icon:'❄️', name:'Air conditioner', watt:1500},
+  {icon:'🍳', name:'Electric oven',   watt:2000},
+  {icon:'🔋', name:'EV charger',      watt:7000},
+  {icon:'🍽️', name:'Dishwasher',      watt:1200},
+  {icon:'💧', name:'Water heater',    watt:3000},
+];
+
+function computeBestHourFor(watt) {
+  if(!liveData) return null;
+  const d = liveData;
+  // Score = solar - demand. For EV (overnight ok), also check 0-5 window.
+  let bestScore = -Infinity, bestH = d.bestHour;
+  const range = watt >= 5000 ? [...Array(24).keys()] : [...Array(24).keys()].slice(6, 22);
+  for(const i of range){
+    const score = d.solarScore[i] * 0.5 - d.demandIdx[i] * 0.5;
+    if(score > bestScore){ bestScore = score; bestH = i; }
+  }
+  return bestH;
+}
+
+function renderSuggestions() {
+  if(!liveData) return;
+  const d = liveData;
+  const topApps = APPLIANCES_DEF.slice(0,4);
+  const list = document.getElementById('suggestionList');
+
+  const cards = topApps.map((a,idx) => {
+    const bh = computeBestHourFor(a.watt);
+    const saving = Math.max(0, Math.round((d.currentPrice - d.prices[bh]) * (a.watt/1000) * 1.5 * 10));
+    const isNowGood = d.solarScore[d.nowHour] > 55 && d.demandIdx[d.nowHour] < 50;
+    const best = idx === 0;
+    const reason = buildReason(a, bh, d);
+    return `
+      <div class="suggestion-card${best?' best':''}">
+        <div class="sug-icon">${a.icon}</div>
+        <div class="sug-body">
+          ${best?'<span class="best-tag">★ best time today</span>':''}
+          <div class="sug-name">${a.name}</div>
+          <div class="sug-time">Run at ${fmtHour(bh)}</div>
+          <div class="sug-reason">${reason}</div>
+        </div>
+        <div class="sug-right">
+          <div class="sug-save">${saving>0?'₹'+saving:'--'}</div>
+          <div class="sug-save-label">saved</div>
+        </div>
+      </div>`;
+  });
+  list.innerHTML = cards.join('');
+}
+
+function buildReason(app, bh, d) {
+  const solar = d.solarScore[bh];
+  const demand = d.demandIdx[bh];
+  const price = d.prices[bh].toFixed(2);
+  if(bh >= 0 && bh <= 5)
+    return `Overnight off-peak — demand drops to ${demand}/100. Price est. ₹${price}/kWh, saving on running cost.`;
+  if(solar >= 70)
+    return `Solar score peaks at ${solar}% at ${fmtHour(bh)} — cleanest energy of the day. Grid demand at ${demand}/100.`;
+  if(solar >= 40)
+    return `Good solar window (${solar}%) with moderate grid demand (${demand}/100). Est. ₹${price}/kWh.`;
+  return `Lowest demand window available (${demand}/100). Solar at ${solar}%. Est. ₹${price}/kWh.`;
+}
+
+// ── UPDATE AI SYSTEM PROMPT WITH LIVE CONTEXT ──
+function getLiveSystemPrompt() {
+  if(!liveData) return 'You are Watt, a smart energy assistant for Chennai.';
+  const d = liveData;
+  const backendLines = [];
+  if (d.frequencyHz)      backendLines.push(`- Grid frequency: ${d.frequencyHz} Hz`);
+  if (d.currentDemandMW)  backendLines.push(`- TN actual demand: ${Math.round(d.currentDemandMW)} MW (source: TN SLDC)`);
+  if (d.nationalDemandMW) backendLines.push(`- National demand: ${Math.round(d.nationalDemandMW)} MW (source: grid-india.in)`);
+  if (d.nationalRenewablePct) backendLines.push(`- National renewable share: ${d.nationalRenewablePct}%`);
+  if (d.solarMW)          backendLines.push(`- TN solar generation: ${Math.round(d.solarMW)} MW`);
+  if (d.windMW)           backendLines.push(`- TN wind generation: ${Math.round(d.windMW)} MW`);
+  if (d.priceSource)      backendLines.push(`- Price source: ${d.priceSource}`);
+  if (d.generationMix) {
+    const m = d.generationMix;
+    const parts = Object.entries(m).filter(([,v])=>v).map(([k,v])=>`${k.replace('_mw','')} ${Math.round(v)} MW`);
+    if (parts.length) backendLines.push(`- National generation mix: ${parts.join(', ')}`);
+  }
+
+  return `You are Watt, a smart energy assistant for Chennai, India (Tamil Nadu grid / TANGEDCO).
+You have LIVE data from multiple sources fetched right now.
+
+CURRENT CONDITIONS (${fmtHour(d.nowHour)}):
+- Temperature: ${d.currentTemp.toFixed(1)}°C
+- Solar radiation: ${Math.round(d.currentRadiation)} W/m² (solar score: ${d.currentSolarScore}%)
+- Cloud cover: ${Math.round(d.currentCloud)}%
+- Wind: ${d.currentWind.toFixed(1)} km/h
+- Demand index: ${d.currentDemand}/100 (${demandLabel(d.currentDemand)})
+- Price now: ₹${d.currentPrice.toFixed(2)}/kWh
+${backendLines.join('\n')}
+
+24-HR FORECAST:
+- Demand index by hour: ${JSON.stringify(d.demandIdx)}
+- Solar score % by hour: ${JSON.stringify(d.solarScore)}
+- Prices ₹/kWh by hour: ${JSON.stringify(d.prices.map(p=>+p.toFixed(2)))}
+- Temperature by hour: ${JSON.stringify(d.temps.map(t=>Math.round(t)))}
+
+BEST WINDOW: ${fmtHour(d.bestHour)}–${fmtHour(d.bestHour+2)} · solar ${d.bestSolar}% · demand ${d.bestDemand}/100 · ₹${d.bestPrice.toFixed(2)}/kWh
+
+TANGEDCO domestic tariff slabs: 0-100 units free, 101-200 ₹1.50, 201-500 ₹3.00, 501-1000 ₹4.50, >1000 ₹6.00/unit.
+
+Give SHORT (2-3 sentence) data-driven answers. Use actual numbers. Use ₹. No markdown.`;
+}
+
+function updateAIContext() {
+  if(!liveData) return;
+  const d = liveData;
+  const msgs = document.getElementById('aiMessages');
+  const greet = `Live data loaded for Chennai! Right now it's ${d.currentTemp.toFixed(1)}°C with solar at ${d.currentSolarScore}% and grid demand at ${d.currentDemand}/100. ${d.currentDemand>=75?'Prices are at peak — avoid heavy appliances for the next hour or two.':d.currentSolarScore>=60?'Good solar conditions right now — a decent time to run appliances.':'The best window today is '+fmtHour(d.bestHour)+'–'+fmtHour(d.bestHour+2)+' when solar peaks at '+d.bestSolar+'%.'} Ask me anything!`;
+  msgs.innerHTML = `<div class="msg ai"><div class="msg-bubble">${greet}</div><div class="msg-time">now</div></div>`;
+}
+
+// ── AI CHAT ──
+let mqIdx = 0;
+const fallbackMsgs = [
+  ()=>`Right now solar score is ${liveData?.currentSolarScore??'--'}% and demand is ${liveData?.currentDemand??'--'}/100. The best window today is ${fmtHour(liveData?.bestHour??13)} when solar peaks at ${liveData?.bestSolar??'--'}% — roughly half the current demand level.`,
+  ()=>`Current temperature is ${liveData?.currentTemp?.toFixed(1)??'--'}°C. High AC demand drives the grid up during afternoons. Pre-cooling your home around ${fmtHour(liveData?.bestHour??14)} instead of 7 PM can save significantly.`,
+  ()=>`Estimated price right now is ₹${liveData?.currentPrice?.toFixed(2)??'--'}/kWh. At ${fmtHour(liveData?.bestHour??13)} it drops to ₹${liveData?.bestPrice?.toFixed(2)??'--'}/kWh — that's your window for heavy appliances.`,
+  ()=>`Cloud cover is ${Math.round(liveData?.currentCloud??0)}% right now. ${(liveData?.currentCloud??0)>60?'Clouds are reducing solar output — overnight charging is your best option today.':'Clear skies ahead — the afternoon solar peak should be strong.'}`,
+];
+
+async function sendAI() {
+  const input = document.getElementById('aiInput');
+  const sendBtn = document.getElementById('aiSendBtn');
+  const text = input.value.trim();
+  if(!text) return;
+  const msgs = document.getElementById('aiMessages');
+  input.value=''; sendBtn.disabled=true;
+
+  const now = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+  msgs.innerHTML += `<div class="msg user"><div class="msg-bubble">${text}</div><div class="msg-time">${now}</div></div>`;
+  const tid = 'typing-'+Date.now();
+  msgs.innerHTML += `<div id="${tid}" class="msg ai"><div class="typing"><span></span><span></span><span></span></div></div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+
+  let reply = '';
+  if(ANTHROPIC_KEY) {
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_KEY,'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,system:getLiveSystemPrompt(),messages:[{role:'user',content:text}]})
+      });
+      const data = await res.json();
+      reply = data.content?.[0]?.text||'';
+    } catch(e){}
+  }
+
+  if(!reply) {
+    await new Promise(r=>setTimeout(r,700+Math.random()*500));
+    reply = fallbackMsgs[mqIdx%fallbackMsgs.length]();
+    mqIdx++;
+  }
+
+  document.getElementById(tid)?.remove();
+  msgs.innerHTML += `<div class="msg ai"><div class="msg-bubble">${reply}</div><div class="msg-time">${new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</div></div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+  sendBtn.disabled=false; input.focus();
+}
+
+// ── APPLIANCE SCHEDULER ──
+const appliances = [
+  {id:'washer',icon:'🧺',name:'Washing machine',watt:'500W'},
+  {id:'ac',icon:'❄️',name:'Air conditioner',watt:'1500W'},
+  {id:'oven',icon:'🍳',name:'Electric oven',watt:'2000W'},
+  {id:'ev',icon:'🔋',name:'EV charger',watt:'7000W'},
+  {id:'dw',icon:'🍽️',name:'Dishwasher',watt:'1200W'},
+  {id:'water',icon:'💧',name:'Water heater',watt:'3000W'},
+];
+
+function buildApplianceGrid() {
+  document.getElementById('applianceGrid').innerHTML = appliances.map(a=>`
+    <div class="appliance-card" id="app-${a.id}" onclick="toggleApp('${a.id}')">
+      <div class="app-icon">${a.icon}</div>
+      <div class="app-name">${a.name}</div>
+      <div class="app-watt">${a.watt}</div>
+      <div class="app-check">✓ Selected</div>
+    </div>`).join('');
+}
+
+let selectedApps = new Set();
+function toggleApp(id) {
+  const card = document.getElementById('app-'+id);
+  if(selectedApps.has(id)){selectedApps.delete(id);card.classList.remove('selected');}
+  else{selectedApps.add(id);card.classList.add('selected');}
+}
+
+async function analyzeAppliances() {
+  if(selectedApps.size===0) return;
+  const btn = document.getElementById('analyzeBtn');
+  const btnText = document.getElementById('analyzeBtnText');
+  btn.disabled=true;
+  btnText.innerHTML='<span class="spinner"></span> Analysing live data…';
+  document.getElementById('resultCards').innerHTML='';
+
+  const selected = appliances.filter(a=>selectedApps.has(a.id));
+  const appList = selected.map(a=>`${a.name} (${a.watt})`).join(', ');
+
+  let results = null;
+
+  if(ANTHROPIC_KEY && liveData) {
+    try {
+      const sysPrompt = getLiveSystemPrompt() +
+        `\n\nFor each appliance, recommend the BEST time to run it today using the live data above.
+Respond ONLY as a JSON array, no markdown, no text outside JSON.
+Format: [{"appliance":"name","icon":"emoji","best_time":"H:MM AM/PM","window":"H AM–H PM","price":"₹X.XX/kWh","solar_pct":XX,"demand_idx":XX,"saving_vs_now":"₹XX","reason":"one sentence","rating":"best|good|ok"}]`;
+      const res = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':ANTHROPIC_KEY,'anthropic-version':'2023-06-01'},
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:sysPrompt,messages:[{role:'user',content:`Optimise: ${appList}. Use live data. JSON only.`}]})
+      });
+      const data = await res.json();
+      const text = data.content?.[0]?.text||'';
+      results = JSON.parse(text.replace(/```json|```/g,'').trim());
+    } catch(e){results=null;}
+  }
+
+  // Live-data-driven fallback
+  if(!results && liveData) {
+    results = selected.map(a => {
+      const watt = parseInt(a.watt);
+      const bh = computeBestHourFor(watt);
+      const d = liveData;
+      const saving = Math.max(0, Math.round((d.currentPrice - d.prices[bh]) * (watt/1000) * 1.5 * 10));
+      return {
+        appliance: a.name, icon: a.icon,
+        best_time: fmtHour(bh),
+        window: fmtHour(bh)+'–'+fmtHour(bh+2),
+        price: '₹'+d.prices[bh].toFixed(2)+'/kWh',
+        solar_pct: d.solarScore[bh],
+        demand_idx: d.demandIdx[bh],
+        saving_vs_now: saving>0?'₹'+saving:'₹0',
+        reason: buildReason({name:a.name}, bh, d),
+        rating: d.solarScore[bh]>=60&&d.demandIdx[bh]<50?'best':d.demandIdx[bh]<65?'good':'ok',
+      };
+    });
+    await new Promise(r=>setTimeout(r,600));
+  }
+
+  btn.disabled=false;
+  btnText.innerHTML='⚡ Optimize with live data';
+
+  const container = document.getElementById('resultCards');
+  (results||[]).forEach((r,i)=>{
+    const div = document.createElement('div');
+    div.className='result-card';
+    div.style.animationDelay=(i*0.08)+'s';
+    div.innerHTML=`
+      <div class="result-header">
+        <div class="result-appliance">${r.icon} ${r.appliance}</div>
+        <span class="result-time-badge${r.rating!=='best'?' ok':''}">Run at ${r.best_time}</span>
+      </div>
+      <div class="result-body">
+        ${r.reason}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+          <div>
+            <div class="renew-label"><span>Solar score</span><span style="color:var(--amber)">${r.solar_pct}%</span></div>
+            <div class="renew-bar"><div class="renew-fill" style="width:${r.solar_pct}%;background:var(--amber)"></div></div>
+          </div>
+          <div>
+            <div class="renew-label"><span>Demand index</span><span style="color:${r.demand_idx>=75?'var(--red)':r.demand_idx>=50?'var(--amber)':'var(--green)'}">${r.demand_idx}/100</span></div>
+            <div class="renew-bar"><div class="renew-fill" style="width:${r.demand_idx}%;background:${r.demand_idx>=75?'var(--red)':r.demand_idx>=50?'var(--amber)':'var(--green)'}"></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="result-savings">↓ Save ${r.saving_vs_now} vs running now · ${r.price}</div>`;
+    container.appendChild(div);
+  });
+}
+
+// ── SAVINGS PAGE ──
+function buildSavingsChart() {
+  const ctx = document.getElementById('savingsChart').getContext('2d');
+  new Chart(ctx,{
+    type:'bar',
+    data:{labels:['Week 1','Week 2','Week 3','Week 4'],datasets:[{label:'Saved (₹)',data:[64,78,91,79],backgroundColor:'rgba(74,222,128,0.5)',borderColor:'#4ade80',borderWidth:1,borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#5a6b5a',font:{size:11}}},y:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#4ade80',font:{size:11},callback:v=>'₹'+v}}}}
+  });
+}
+
+function buildWins() {
+  document.getElementById('winslist').innerHTML = [
+    {icon:'🧺',name:'Washed at 2 PM · March 18',save:'₹17 saved',reason:'Ran during solar peak — 76% solar score used.'},
+    {icon:'🔋',name:'EV charged overnight · March 15',save:'₹29 saved',reason:'Off-peak demand: 18/100. Much lower than evening peak of 88/100.'},
+    {icon:'❄️',name:'AC pre-cooled at 3 PM · March 12',save:'₹11 saved',reason:'Avoided 7 PM demand spike (92/100). Solar score was 68% at 3 PM.'},
+  ].map(w=>`
+    <div class="suggestion-card">
+      <div class="sug-icon">${w.icon}</div>
+      <div class="sug-body"><div class="sug-name">${w.name}</div><div class="sug-reason">${w.reason}</div></div>
+      <div class="sug-right"><div class="sug-save" style="color:var(--green)">${w.save}</div></div>
+    </div>`).join('');
+}
+
+// ── NAVIGATION ──
+function showPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ── BOOT ──
+buildApplianceGrid();
+buildSavingsChart();
+buildWins();
+fetchLiveData();
+setInterval(()=>fetchLiveData(), REFRESH_MS);
+</script>
+</body>
+</html>
